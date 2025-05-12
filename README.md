@@ -1,5 +1,8 @@
 # FootballLiveApi
 
+< FootballLiveApi is a serverless API built with Cloudflare Workers that scrapes and aggregates live football match data from publicly available sources. It is designed for educational and demonstration purposes only.
+
+
 **FootballLiveApi** is a serverless API built with Cloudflare Workers that scrapes and aggregates live football match data from publicly available sources. It is designed for educational and demonstration purposes only.
 
 ## Overview
