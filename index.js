@@ -14,6 +14,7 @@ function handleError(err) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
     },
   });
 }
@@ -43,7 +44,8 @@ async function handleRequest(event) {
   }
 
   const referer = "https://socolivev.co/";
-  const agent = request.headers.get("user-agent") || "Custom-Agent";
+  // iOS Safari friendly User-Agent
+  const agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
 
   const dates = [
     formatDate(Date.now() - 86400000),
@@ -53,13 +55,15 @@ async function handleRequest(event) {
 
   let all = [];
   for (const d of dates) {
-    all = all.concat(await fetchMatches(d, referer, agent));
+    const matches = await fetchMatches(d, referer, agent);
+    all = all.concat(matches);
   }
 
   return new Response(JSON.stringify(all, null, 2), {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
     }
   });
 }
@@ -68,22 +72,32 @@ function formatDate(ms) {
   return new Date(ms).toISOString().split("T")[0].replace(/-/g, "");
 }
 
-async function fetchServerURL(roomNum) {
-  try {
-    const res = await fetch(`https://json.vnres.co/room/${roomNum}/detail.json`);
-    const txt = await res.text();
-    const m = txt.match(/detail\((.*)\)/);
-    if (m) {
-      const js = JSON.parse(m[1]);
-      if (js.code === 200) {
-        const s = js.data.stream;
-        return { m3u8: s.m3u8, hdM3u8: s.hdM3u8 };
+// Fetch server URLs concurrently
+async function fetchServerURLs(anchors, referer) {
+  const promises = anchors.map(async a => {
+    const room = a.anchor.roomNum;
+    try {
+      const res = await fetch(`https://json.vnres.co/room/${room}/detail.json`);
+      const txt = await res.text();
+      const m = txt.match(/detail\((.*)\)/);
+      if (m) {
+        const js = JSON.parse(m[1]);
+        if (js.code === 200) {
+          const s = js.data.stream;
+          const servers = [];
+          if (s.m3u8) servers.push({ name: "Soco SD", stream_url: s.m3u8, referer });
+          if (s.hdM3u8) servers.push({ name: "Soco HD", stream_url: s.hdM3u8, referer });
+          return servers;
+        }
       }
+    } catch (e) {
+      console.warn(`room ${room} error:`, e.message);
     }
-  } catch (e) {
-    console.warn(`room ${roomNum} error:`, e.message);
-  }
-  return { m3u8: null, hdM3u8: null };
+    return [];
+  });
+
+  const results = await Promise.all(promises);
+  return results.flat();
 }
 
 async function fetchMatches(date, referer, agent) {
@@ -92,7 +106,7 @@ async function fetchMatches(date, referer, agent) {
       headers: { referer, "user-agent": agent, origin: "https://json.vnres.co" }
     });
     const txt = await res.text();
-    const m = txt.match(/matches_\d+\((.*)\)/);
+    const m = txt.match(/matches_\d+\((.*)\)/s); // /s flag to include newlines
     if (!m) return [];
     const js = JSON.parse(m[1]);
     if (js.code !== 200) return [];
@@ -114,14 +128,9 @@ async function fetchMatches(date, referer, agent) {
         ? `${homeScore} - ${awayScore}`
         : null;
 
-      const servers = [];
-      if (status === "live") {
-        for (const a of it.anchors) {
-          const room = a.anchor.roomNum;
-          const { m3u8, hdM3u8 } = await fetchServerURL(room);
-          if (m3u8) servers.push({ name: "Soco SD", stream_url: m3u8, referer });
-          if (hdM3u8) servers.push({ name: "Soco HD", stream_url: hdM3u8, referer });
-        }
+      let servers = [];
+      if (status === "live" && it.anchors) {
+        servers = await fetchServerURLs(it.anchors, referer);
       }
 
       results.push({
@@ -136,6 +145,7 @@ async function fetchMatches(date, referer, agent) {
         servers
       });
     }
+
     return results;
 
   } catch (e) {
