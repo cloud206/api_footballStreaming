@@ -1,5 +1,5 @@
 
-const ALLOWED_ORIGIN = "https://localhost:3000";
+const ALLOWED_ORIGIN = "*";
 
 addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request).catch(handleError));
