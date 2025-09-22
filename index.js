@@ -1,8 +1,7 @@
-
 const ALLOWED_ORIGIN = "*";
 
 addEventListener("fetch", event => {
-  event.respondWith(handleRequest(event.request).catch(handleError));
+  event.respondWith(handleRequest(event).catch(handleError));
 });
 
 function handleError(err) {
@@ -19,20 +18,9 @@ function handleError(err) {
   });
 }
 
-async function handleRequest(request) {
+async function handleRequest(event) {
+  const request = event.request;
   const url = new URL(request.url);
-  const origin = request.headers.get("Origin");
-
-  // Allow only strict Origin
-  if (origin !== ALLOWED_ORIGIN) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "null",
-      },
-    });
-  }
 
   // CORS Preflight
   if (request.method === "OPTIONS") {
